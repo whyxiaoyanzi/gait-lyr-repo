@@ -1494,6 +1494,8 @@ def shank_ang_vel_ED(avel_use: dict, est_freq: dict, fps, title_label="Gaitanaly
 # def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = GaitData("none", 0), fps=50):
 def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kinedata={}):
 
+    
+    
     def find_pairs(first, second):
         pairs = []
         first_track = 0
@@ -1541,7 +1543,8 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
     def is_pair_inside_pair(pair_inside, pair_outside):
         return (pair_inside[0] >= pair_outside[0] and pair_inside[0] <= pair_outside[1]) and (pair_inside[1] >= pair_outside[0] and pair_inside[1] <= pair_outside[1])
 
-    fig_dir = "./"
+    # fig_dir = "./"
+    fig_dir = "C:\\Users\\whyxi\\OneDrive\\Pictures\\Backup\\NUS\\NUS Academics\\FYP EE4002D\\Gait Analysis\\Code\gait-lyr-repo\\Output\\"
     if not os.path.exists(fig_dir):
         os.makedirs(fig_dir)
 

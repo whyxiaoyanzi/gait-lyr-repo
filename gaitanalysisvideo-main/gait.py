@@ -4,6 +4,8 @@ import sys
 import os
 import traceback
 
+
+
 # Openpose video processing with PKL file generated in save_dir
 def process_video(walk_dir, raw_video_file, save_dir, leftLegLength, rightLegLength):
   patientinfo = {
@@ -15,9 +17,11 @@ def process_video(walk_dir, raw_video_file, save_dir, leftLegLength, rightLegLen
 
   try:
     if walk_dir == "Side.RIGHT":
-      openpose_video.process(gaitevents.Side.RIGHT, raw_video_file, save_dir, patientinfo)
+      # openpose_video.process(gaitevents.Side.RIGHT, raw_video_file, save_dir, patientinfo)
+      pass
     elif walk_dir == "Side.LEFT":
-      openpose_video.process(gaitevents.Side.LEFT, raw_video_file, save_dir, patientinfo)
+      # openpose_video.process(gaitevents.Side.LEFT, raw_video_file, save_dir, patientinfo)
+      pass
     else:
       raise ValueError(f"Unknown walk_dir: {walk_dir}.  Accept Side.RIGHT or Side.LEFT")
   except Exception as e:
@@ -32,6 +36,11 @@ def analyse_video(pkl, params=None):
    return gaitevents.analyseVideo(gaitdata)
 
 def analyse_cbta(pkl, filename, left_leg_length, right_leg_length, params=None):
+    # editing read pkl and output csv filepath here
+    filepath = "C:\\Users\\whyxi\\OneDrive\\Pictures\\Backup\\NUS\\NUS Academics\\FYP EE4002D\\Gait Analysis\\Code\\gait-lyr-repo\\"
+    pkl = filepath + pkl
+    filename = filepath + filename
+
     try:
         gaitdata = gaitevents.load_object(pkl)
         gaitdata.patientinfo = {
@@ -47,6 +56,8 @@ def analyse_cbta(pkl, filename, left_leg_length, right_leg_length, params=None):
         traceback.print_exc()
     else:
         if os.path.exists('gaitanalysis.csv') and os.path.exists('kinematics.csv'):
+        # if True:
+        # Ques? Why not just if True? Even if false, still able to create file in same directory, unable to control destination
             os.replace('gaitanalysis.csv', filename+'_cbta.csv')
             os.replace('kinematics.csv', filename+'_kine.csv')
             os.replace('kinematics_1.csv', filename+'_kine_1.csv')
@@ -111,11 +122,19 @@ def analyse_all(pkl, imuLeft, imuRight, filename, left_leg_length, right_leg_len
     analyse_front(pkl, filename, params)
   analyse_imu(imuLeft, imuRight, filename)
 
+
+
+analyse_cbta("pickles\\H001\\Free walk\\AR Gait_P_H001_Free walk_14-06-2022_16-25-45_noAR.pkl", "Output\\", 0.8, 0.8)
+
+
+# Ques? What is this for?
+
 if __name__ == '__main__':
   if len(sys.argv) < 6:
       print(f"Usage: {sys.argv[0]} walk_dir raw_video_file save_dir left_leg_length(mm) right_leg_length(mm)")
       sys.exit(1)
-
+      
+  print("Test6")
   walk_dir = sys.argv[1]
   raw_video_file = sys.argv[2]
   save_dir = sys.argv[3]
@@ -126,7 +145,8 @@ if __name__ == '__main__':
   try:
     process_video(walk_dir, raw_video_file, save_dir, leftLegLength, rightLegLength)
   except:
-    sys.exit(1)
+    # sys.exit(1)
+    pass
 
   # Process PKL
   os.chdir(save_dir)
@@ -135,6 +155,5 @@ if __name__ == '__main__':
   imuLeft = os.path.join(os.path.dirname(raw_video_file),video_name[:-5] + "_2.csv")
   imuRight = os.path.join(os.path.dirname(raw_video_file),video_name[:-5] + "_3.csv")
 
-  analyse_all(pkl, imuLeft, imuRight, video_name, leftLegLength, rightLegLength)
+  # analyse_all(pkl, imuLeft, imuRight, video_name, leftLegLength, rightLegLength)
 
-  analyse_cbta("C:\\Users\\whyxi\\OneDrive\\Pictures\\Backup\\NUS\\NUS Academics\\FYP EE4002D\\Gait Analysis\\pickles\\H001\\Free walk\\AR Gait_P_H001_Free walk_14-06-2022_16-25-45_noAR.pkl", "C:\\Users\\whyxi\\OneDrive\\Pictures\\Backup\\NUS\\NUS Academics\\FYP EE4002D\\Gait Analysis\\Output", 0.8, 0.8)
