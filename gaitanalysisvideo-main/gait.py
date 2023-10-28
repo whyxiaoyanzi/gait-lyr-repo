@@ -30,10 +30,10 @@ def process_video(walk_dir, raw_video_file, save_dir, leftLegLength, rightLegLen
     raise
 
 def analyse_video(pkl, params=None):
-   gaitdata = gaitevents.load_object(pkl)
-   if params is not None:
-     gaitdata.override(params)
-   return gaitevents.analyseVideo(gaitdata)
+    gaitdata = gaitevents.load_object(pkl)
+    if params is not None:
+      gaitdata.override(params)
+    return gaitevents.analyseVideo(gaitdata)
 
 def analyse_cbta(pkl, filename, left_leg_length, right_leg_length, params=None):
     # editing read pkl and output csv filepath here
@@ -123,8 +123,10 @@ def analyse_all(pkl, imuLeft, imuRight, filename, left_leg_length, right_leg_len
   analyse_imu(imuLeft, imuRight, filename)
 
 
-
-analyse_cbta("pickles\\H001\\Free walk\\AR Gait_P_H001_Free walk_14-06-2022_16-25-45_noAR.pkl", "Output\\", 0.8, 0.8)
+params = '{"adjustOpenpose":1,"oLeft":3,"oRight":3}'
+# 1 is opa, 2 is rjn
+analyse_cbta("pickles\\H006\\Free walk\\AR Gait_P_HS0909202202_Free walk_09-09-2022_17-10-29_noAR.pkl", "Output\\", 0.8, 0.8, params)
+# default Raw (No), but timings will change if add OPA or RJN under params
 
 
 # Ques? What is this for?

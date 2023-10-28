@@ -4,6 +4,7 @@
 import numpy as np
 import csv
 import scipy
+import pandas as pd
 # import scipy.ndimage
 # import scipy.signal
 # import scipy.fft
@@ -13,8 +14,10 @@ import matplotlib.pyplot as plt
 
 import pickle
 import json
+from json import JSONEncoder
 import os
 import copy
+import sys
 
 from enum import Enum
 from enum import auto
@@ -329,6 +332,7 @@ class GaitData:
 
         print("Jump remedy end.\n")
         return self
+
 
 def save_object(obj, filename):
     with open(filename, 'wb') as output:
@@ -935,6 +939,7 @@ def cbta(gaitdata):
 
     display_raw = True
 
+    # Ques? What is heel_raw etc? Distance?
     heel_raw = {Side.LEFT: [], Side.RIGHT: []}
     heel_raw[Side.LEFT] = np.array(data[Joint.LEFT_HEEL] - data[Joint.MIDDLE_HIP])
     heel_raw[Side.RIGHT] = np.array(data[Joint.RIGHT_HEEL] - data[Joint.MIDDLE_HIP])
@@ -958,7 +963,7 @@ def cbta(gaitdata):
         toe_filt[side] = scipy.signal.filtfilt(b, a, scipy.signal.detrend(toe_raw[side],axis=0), axis=0, padlen=padlength)
 
     stride_freq = {Side.LEFT: [], Side.RIGHT: []}
-    f = {Side.LEFT: [], Side.RIGHT: []}
+    txtfile = {Side.LEFT: [], Side.RIGHT: []}
     psd = {Side.LEFT: [], Side.RIGHT: []}
 
     HS = {Side.LEFT: [], Side.RIGHT: []}
@@ -990,8 +995,8 @@ def cbta(gaitdata):
         avg_leglen[side] = np.array(avg_leglen[side])
 
     for side in Side:
-        f[side], psd[side] = scipy.signal.periodogram(heel_filt[side][:, 0], fs=gaitdata.fps)
-        stride_freq[side] = f[side][np.argmax(psd[side])]
+        txtfile[side], psd[side] = scipy.signal.periodogram(heel_filt[side][:, 0], fs=gaitdata.fps)
+        stride_freq[side] = txtfile[side][np.argmax(psd[side])]
         print(side.name+" detected stride frequency: "+str(stride_freq[side])+"Hz")
 
     #JSLOW(20230714) - pick higher detected stride frequency if one side is too low
@@ -1058,8 +1063,8 @@ def cbta(gaitdata):
     cbtwriter.writerows(xDistances)
 
     print_analysis_HSTO(HS, TO, True, gaitdata)
+    # end of cbta function
 
-# old
 def foot_velocity_algorithm(gaitdata):
 
     data = gaitdata.data
@@ -1492,9 +1497,7 @@ def shank_ang_vel_ED(avel_use: dict, est_freq: dict, fps, title_label="Gaitanaly
 # Prints several gait parameters, given the heelstrike and toeoff frames.
 # Assumes subject is walking in positive x direction.
 # def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = GaitData("none", 0), fps=50):
-def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kinedata={}):
-
-    
+def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kinedata={}):  
     
     def find_pairs(first, second):
         pairs = []
@@ -1555,6 +1558,7 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
 
     if use_gaitdata:
 
+        print("my fps is: " + str(fps))
         if (gaitdata.framework == "mediapipe") or (gaitdata.framework == "mediapipeheavy") or (gaitdata.framework == "arkit"):
             data = gaitdata.data_world
             distance_units = "m"
@@ -1652,11 +1656,18 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
 
     step_lengths = {Side.LEFT: [], Side.RIGHT: []}
     step_durations = {Side.LEFT: [], Side.RIGHT: []}
+    step_durations_pairs = {Side.LEFT: [], Side.RIGHT: []}
     stride_lengths = {Side.LEFT: [], Side.RIGHT: []}
     stride_durations = {Side.LEFT: [], Side.RIGHT: []}
+    stride_durations_pairs = {Side.LEFT: [], Side.RIGHT: []}
+    final_stride_durations_pairs = {Side.LEFT: [], Side.RIGHT: []}
 
+    single_supp_pairs = {Side.LEFT: [], Side.RIGHT: []}
     init_double_supp_durations = {Side.LEFT: [], Side.RIGHT: []}
+    init_double_supp_pairs = {Side.LEFT: [], Side.RIGHT: []}
     term_double_supp_durations = {Side.LEFT: [], Side.RIGHT: []}
+    term_double_supp_pairs = {Side.LEFT: [], Side.RIGHT: []}
+    opp_foot_off_pairs = {Side.LEFT: [], Side.RIGHT: []}
 
     csvfile = open('gaitanalysis.csv', 'w', newline='')
     csvwriter = csv.writer(csvfile, lineterminator='\n')
@@ -1668,6 +1679,17 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
 
         csvwriter.writerow([side.name])
 
+        # ADD HERE
+        csvwriter.writerow(['HS[LEFT]',HS[Side.LEFT]])
+        csvwriter.writerow(['HS[RIGHT]',HS[Side.RIGHT]])
+        csvwriter.writerow(['TO[LEFT]',TO[Side.LEFT]])
+        csvwriter.writerow(['TO[RIGHT]',TO[Side.RIGHT]])
+        csvwriter.writerow(["tohs_pairs, left", tohs_pairs[Side.LEFT]])
+        csvwriter.writerow(["tohs_pairs_alt, left", tohs_pairs_alt[Side.LEFT]])
+        csvwriter.writerow(["hsto_pairs_alt, left", hsto_pairs_alt[Side.LEFT]])
+        csvwriter.writerow(["step_pairs, left", step_pairs[Side.LEFT]])
+        csvwriter.writerow(["stride_pairs, left", stride_pairs[Side.LEFT]])
+
         print("\nStride lengths and/or durations: ")
         for i in range(len(step_pairs[side.opposite()])):
             # Start with step of opposite foot
@@ -1678,6 +1700,7 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
                     stride_length = (filt_heel[side.opposite()][step_pairs[side.opposite()][i][1]][0] * metres_per_pixel[side.opposite()][step_pairs[side.opposite()][i][1]]) - \
                                     (filt_heel[side][step_pairs[side.opposite()][i][1]][0] * metres_per_pixel[side.opposite()][step_pairs[side.opposite()][i][1]])
             stride_duration = (step_pairs[side.opposite()][i][1] - step_pairs[side.opposite()][i][0]) / fps
+            stride_durations_pairs[side].append([step_pairs[side.opposite()][i][1] , step_pairs[side.opposite()][i][0]])
             for k in range(len(step_pairs[side])):
                 # Add step of main foot
                 if step_pairs[side][k][1] > step_pairs[side.opposite()][i][1]:
@@ -1689,8 +1712,9 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
                                              (filt_heel[side.opposite()][step_pairs[side][k][1]][0] * metres_per_pixel[side][step_pairs[side][k][1]])
                         stride_length = gaitdata.distance_param_sign_convert(stride_length)
                         stride_lengths[side].append(stride_length)
-                    stride_duration += (step_pairs[side][k][1] - step_pairs[side][k][0]) / fps
+                    stride_duration += (step_pairs[side][k][1] - step_pairs[side][k][0]) / fps                    
                     stride_durations[side].append(stride_duration)
+                    final_stride_durations_pairs[side].append([step_pairs[side][k][1], step_pairs[side][k][0]])                  
                     if use_gaitdata:
                         print(str(stride_lengths[side][-1]) + distance_units + ", " + str(stride_durations[side][-1]) + "s")
                     else:
@@ -1709,8 +1733,8 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
                                       step_pairs[side][k][1]])
                 step_length = gaitdata.distance_param_sign_convert(step_length)
                 step_lengths[side].append(step_length)  # distance between toes at step heelstrike
-            step_durations[side].append((step_pairs[side][k][1] - step_pairs[side][k][
-                0]) / fps)  # duration between ipsilateral and contralateral heelstrikes
+            step_durations[side].append((step_pairs[side][k][1] - step_pairs[side][k][0]) / fps)  # duration between ipsilateral and contralateral heelstrikes
+            step_durations_pairs[side].append([step_pairs[side][k][1], step_pairs[side][k][0]])
             if use_gaitdata:
                 print(str(step_lengths[side][-1]) + distance_units + ", " + str(step_durations[side][-1]) + "s")
             else:
@@ -1725,23 +1749,31 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
 
         for i in range(len(stride_pairs[side])):
 
+            single_supp_pairs[side].append([])
             init_double_supp_durations[side].append([])
+            init_double_supp_pairs[side].append([])
             term_double_supp_durations[side].append([])
+            term_double_supp_pairs[side].append([])
 
             print("\nInitial double support time:")
             for k in range(len(hsto_pairs_alt[side])):
                 if is_pair_inside_pair(hsto_pairs_alt[side][k], stride_pairs[side][i]) and \
                         not (hsto_pairs_alt[side][k][0] == stride_pairs[side][i][1]):
-                    init_double_supp_durations[side][i].append((hsto_pairs_alt[side][k][1] - hsto_pairs_alt[side][k][
-                        0]) / fps)  # Initial double support is taken as the time between HS of ipsilateral foot and TO of contralateral foot
+                    init_double_supp_durations[side][i].append((hsto_pairs_alt[side][k][1] - hsto_pairs_alt[side][k][0]) / fps)  # Initial double support is taken as the time between HS of ipsilateral foot and TO of contralateral foot
+                    init_double_supp_pairs[side][i].append( [ hsto_pairs_alt[side][k][1] , hsto_pairs_alt[side][k][0] ] )
                     print(str(init_double_supp_durations[side][i][-1]) + "s")
+                    print("init_double_supp_durations")
+                    print(init_double_supp_durations)
 
             print("\nTerminal double support time:")
             for k in range(len(hsto_pairs_alt[side.opposite()])):
                 if is_pair_inside_pair(hsto_pairs_alt[side.opposite()][k], stride_pairs[side][i]):
                     term_double_supp_durations[side][i].append(
                         (hsto_pairs_alt[side.opposite()][k][1] - hsto_pairs_alt[side.opposite()][k][0]) / fps)
+                    term_double_supp_pairs[side][i].append( [hsto_pairs_alt[side.opposite()][k][1] , hsto_pairs_alt[side.opposite()][k][0] ] )
                     print(str(term_double_supp_durations[side][i][-1]) + "s")
+                    print("term_double_supp_durations")
+                    print(term_double_supp_durations)
 
             print("\nTotal double support time:")
             if len(init_double_supp_durations[side][i]) != 1 or len(term_double_supp_durations[side][i]) != 1:
@@ -1794,6 +1826,9 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
                 # Search for toe-off of contralateral foot during each stride of ipsilateral foot
                 if TO[side.opposite()][k] >= stride_pairs[side][i][0] and TO[side.opposite()][k] <= stride_pairs[side][i][1]:
                     opp_foot_off = ((TO[side.opposite()][k] - stride_pairs[side][i][0]) / fps) / stride_durations[side][i]
+                    print("opp foot off = " + str( TO[side.opposite()][k] ) + " - " + str( stride_pairs[side][i][0] ))
+                    opp_foot_off_pairs[side].append( [ TO[side.opposite()][k] , stride_pairs[side][i][0] ] )
+                    # print("stride durations = " + str(stride_durations[side][i]))
                     opp_foot_off *= 100
                     print(str(opp_foot_off) + "%")
                     break
@@ -1802,8 +1837,8 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
             single_support_time = 'INVALID'
             for k in range(len(tohs_pairs[side.opposite()])):
                 if is_pair_inside_pair(tohs_pairs[side.opposite()][k], stride_pairs[side][i]):
-                    single_support_time = (tohs_pairs[side.opposite()][k][1] - tohs_pairs[side.opposite()][k][
-                        0]) / fps  # Single support is equivalent to time between TO and HS of opposite foot
+                    single_support_time = (tohs_pairs[side.opposite()][k][1] - tohs_pairs[side.opposite()][k][0]) / fps  # Single support is equivalent to time between TO and HS of opposite foot
+                    single_supp_pairs[side][i].append([ tohs_pairs[side.opposite()][k][1] , tohs_pairs[side.opposite()][k][0] ])
                     print(str(single_support_time) + "s")
 
             print("\nStep widths:")
@@ -1815,22 +1850,28 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
                                          data[Joint.RIGHT_HEEL][hsto_pairs_alt[side.opposite()][k][0]][2])
                         print(str(step_width) + distance_units)
 
+            # csvwriter.writerow(['Double support =', str(init_double_supp_durations_i_0) + "+" + str(term_double_supp_durations_i_0)])
             csvwriter.writerow(['Double support (s)', str(double_support)])
+            csvwriter.writerow(['double_supp_pairs', str(init_double_supp_pairs[side][i][0]), str(term_double_supp_pairs[side][i][0]) ])
             csvwriter.writerow(['Foot off (%)', str(foot_off)])
             csvwriter.writerow(['Limp index', str(limp_index)])
             csvwriter.writerow(['Opposite foot contact (%)', str(opp_foot_contact)])
             csvwriter.writerow(['Opposite foot off (%)', str(opp_foot_off)])
+            csvwriter.writerow(['opp_foot_off_pairs', str(opp_foot_off_pairs[side][i])])
             csvwriter.writerow(['Single support (s)', str(single_support_time)])
+            csvwriter.writerow(['single_supp_pairs', str(single_supp_pairs[side][i][0])])
             # csvwriter.writerow(['Step width', str(step_width)])
             for k in range(len(step_pairs[side])):
                 if is_pair_inside_pair(step_pairs[side][k], stride_pairs[side][i]):
                     if use_gaitdata:
                         csvwriter.writerow(['Step length (m)', str(step_lengths[side][k])])
                     csvwriter.writerow(['Step time (s)', str(step_durations[side][k])])
+                    csvwriter.writerow(['step_durations_pairs', str(step_durations_pairs[side][k])])
                     stepDuration = step_durations[side][k]
             if use_gaitdata:
                 csvwriter.writerow(['Stride length (m)', str(stride_lengths[side][i])])
             csvwriter.writerow(['Stride time (s)', str(stride_durations[side][i])])
+            csvwriter.writerow(['stride_duration_pairs', str(stride_durations_pairs[side][i]), str(final_stride_durations_pairs[side][i])])
             if use_gaitdata:
                 #JSLOW(20230719) - change walking speed to per stride
                 # csvwriter.writerow(['Walking speed (m/s)', str(walking_speed)])
@@ -1891,7 +1932,7 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
 
         line_style = {Side.LEFT: "r", Side.RIGHT: "g"}
 
-# JSLOW(20230216) - add csv output for kinematic data per frame per side
+        # JSLOW(20230216) - add csv output for kinematic data per frame per side
         csvkinetime = {Side.LEFT: open('kinematics_1.csv','w', newline=''),
                        Side.RIGHT: open('kinematics_2.csv','w', newline='')}
         cktwriter = {Side.LEFT: csv.writer(csvkinetime[Side.LEFT], lineterminator='\n'), 
@@ -2012,6 +2053,10 @@ def print_analysis_HSTO(HS, TO, use_gaitdata: bool, gaitdata = None, fps=50, kin
         ckwriter.writerow(['Heel Strike', " ".join(f'{time_axis[x]}' for x in HS[side])])
         ckwriter.writerow(['Toe Off', " ".join(f'{time_axis[x]}' for x in TO[side])])
 
+
+# end of print_analysis_HSTO 
+
+
 # JSLOW(20230529) take 4 points to define 2 vectors
 def find_flexion_deg(face_direction: Side, upperFrom, upperTo, lowerFrom, lowerTo):
 # def find_flexion_deg(face_direction: Side, upper_joint, middle_joint, lower_joint):
@@ -2023,15 +2068,28 @@ def find_flexion_deg(face_direction: Side, upperFrom, upperTo, lowerFrom, lowerT
 
     vector_upper = upperTo[0:2] - upperFrom[0:2]
     vector_lower = lowerTo[0:2] - lowerFrom[0:2]
-
+    print("upperTo")
+    print(upperTo)
+    print("vector_upper")
+    print(vector_upper)
+    print("vector_lower")
+    print(vector_lower)
     # Deprecated method which only yields positive angles even during joint extension.
     # cosine = np.dot(vector_lower, vector_upper) / (np.linalg.norm(vector_lower) * np.linalg.norm(vector_upper))
     # angle_rad = np.arccos(cosine)
     # angle_rad = np.pi - angle_rad
 
+    # cross: return a vector if 3D vector cross, return only the z component if 2D vectors cross
     cross = np.cross(vector_upper, vector_lower)
+    print("cross")
+    print(cross)
+    print(np.linalg.norm(cross))
     sine = np.linalg.norm(cross) / (np.linalg.norm(vector_lower) * np.linalg.norm(vector_upper))
     angle_rad = np.arcsin(sine)
+    print("sine")
+    print(sine)
+    print("angle")
+    print(np.rad2deg(angle_rad))
 
     if (face_direction == Side.RIGHT and cross < 0) or \
             (face_direction == Side.LEFT and cross > 0):
@@ -2041,6 +2099,7 @@ def find_flexion_deg(face_direction: Side, upperFrom, upperTo, lowerFrom, lowerT
     return np.rad2deg(angle_rad)
 
 def find_ankleDpFlex_deg(knee, ankle, heel, toe):
+    print("knee = " + str(knee))
     vector_shank = knee - ankle
     vector_foot = toe - heel
     cosine = np.dot(vector_shank, vector_foot) / (np.linalg.norm(vector_shank) * np.linalg.norm(vector_foot))
